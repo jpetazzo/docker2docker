@@ -1,0 +1,4 @@
+#!/bin/sh
+socat TCP-LISTEN:22,fork,reuseaddr TCP:localhost:10022 &
+socat TCP-LISTEN:4243,fork,reuseaddr TCP:localhost:14243 &
+exec kvm -nographic -m 512 -cdrom boot2docker.iso -vnc :0 -redir 10022::22 -redir 14243::4243

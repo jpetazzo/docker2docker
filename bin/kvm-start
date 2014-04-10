@@ -1,0 +1,9 @@
+#!/bin/sh
+mknod /dev/kvm c 10 232
+mkdir /dev/net
+mknod /dev/net/tun c 10 200
+iptables -t nat -A POSTROUTING -s 172.18.0.0/24 -o eth0 -j MASQUERADE
+socat TCP-LISTEN:22,fork,reuseaddr TCP:172.18.0.2:22 &
+socat TCP-LISTEN:4243,fork,reuseaddr TCP:172.18.0.2:4243 &
+exec kvm -nographic -m 512 -cdrom boot2docker.iso -vnc :0 \
+         -device virtio-net,netdev=net0 -netdev tap,id=net0,script=/usr/local/bin/net-script,downscript=no

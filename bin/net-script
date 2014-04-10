@@ -1,0 +1,5 @@
+#!/bin/sh
+ip addr add 172.18.0.1/24 dev "$1"
+ip link set "$1" up
+dnsmasq --dhcp-range=172.18.0.2,172.18.0.2,infinite
+
