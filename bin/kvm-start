@@ -1,16 +1,32 @@
 #!/bin/sh
-mknod /dev/kvm c 10 232
-mkdir /dev/net
-mknod /dev/net/tun c 10 200
-ln -s /proc/mounts /etc/mtab
-if ! [ -s boot2docker.hdd ]; then
-    truncate --size 10G boot2docker.hdd
-    yes | mkfs -t ext4 -L boot2docker-data boot2docker.hdd
-fi
+[ -c /dev/kvm ] || mknod /dev/kvm c 10 232
+[ -d /dev/net ] || mkdir /dev/net
+[ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200
+[ -f /etc/mtab ] || ln -s /proc/mounts /etc/mtab
+qemu-img create -f qcow2 -o backing_file=system.img system.qc2
+[ -s data.img ] || {
+    truncate --size 10G data.img
+    yes | mkfs -t ext4 -L boot2docker-data data.img
+}
 iptables -t nat -A POSTROUTING -s 172.18.0.0/24 -o eth0 -j MASQUERADE
 socat TCP-LISTEN:22,fork,reuseaddr TCP:172.18.0.2:22 &
 socat TCP-LISTEN:4243,fork,reuseaddr TCP:172.18.0.2:4243 &
-exec kvm -nographic -m 512 -vnc :0 \
-         -drive file=boot2docker.hdd,if=virtio \
-         -cdrom boot2docker.iso \
+
+cat > cloudconfig <<EOF
+#cloud-config
+password: docker
+chpasswd: { expire: False }
+ssh_pwauth: True
+runcmd:
+  - cloud-init-per once dockerinstall curl https://get.docker.io/ | sh
+  - cloud-init-per once dockerconfig echo 'DOCKER_OPTS="-H tcp://0.0.0.0:4243 -H unix:///var/run/docker.sock"' >>/etc/default/docker
+  - cloud-init-per once dockerrestart service docker restart
+EOF
+
+cloud-localds cloudconfig.img cloudconfig
+
+exec kvm -nographic -m 2048 -vnc :0 \
+         -drive file=system.qc2,if=virtio \
+         -drive file=data.img,if=virtio \
+         -drive file=cloudconfig.img,if=virtio \
          -device virtio-net,netdev=net0 -netdev tap,id=net0,script=/usr/local/bin/net-script,downscript=no
